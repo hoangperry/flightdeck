@@ -72,9 +72,18 @@ fish -c '
 
 # 6. tmux plugin manager + plugins -----------------------------------------
 TPM="$HOME/.config/tmux/plugins/tpm"
-[ -d "$TPM" ] || git clone -q https://github.com/tmux-plugins/tpm "$TPM"
+# Re-clone if absent or a previous clone left it incomplete (no runnable bin) —
+# a [ -d ] check alone treats an empty/broken dir as "already installed".
+if [ ! -x "$TPM/bin/install_plugins" ]; then
+  rm -rf "$TPM"
+  git clone -q https://github.com/tmux-plugins/tpm "$TPM" || warn "tpm clone failed"
+fi
 info "Installing tmux plugins..."
-"$TPM/bin/install_plugins" >/dev/null 2>&1 || warn "open tmux and press prefix+I to finish"
+if [ -x "$TPM/bin/install_plugins" ]; then
+  "$TPM/bin/install_plugins" >/dev/null 2>&1 || warn "open tmux and press prefix+I to finish"
+else
+  warn "tpm missing — open tmux and press prefix+I to finish"
+fi
 
 # 7. bat (+delta) Catppuccin theme -----------------------------------------
 info "Building bat Catppuccin theme (also used by delta)..."
@@ -85,11 +94,18 @@ for f in Mocha Macchiato Frappe Latte; do
 done
 bat cache --build >/dev/null 2>&1 && ok "bat themes built" || warn "bat cache build failed"
 
-# 8. yazi Catppuccin flavor -------------------------------------------------
-info "Installing yazi flavor..."
-ya pkg add yazi-rs/flavors:catppuccin-mocha >/dev/null 2>&1 \
-  || ya pack -a yazi-rs/flavors:catppuccin-mocha >/dev/null 2>&1 \
-  || warn "yazi flavor skipped (run 'ya pkg add yazi-rs/flavors:catppuccin-mocha')"
+# 8. yazi Catppuccin flavors (mocha = dark, latte = light) ------------------
+info "Installing yazi flavors..."
+add_yazi_flavor() {  # $1 = flavor name, e.g. catppuccin-mocha
+  local name="$1" dir="$HOME/.config/yazi/flavors/$1.yazi"
+  [ -f "$dir/flavor.toml" ] && return 0          # already installed & intact
+  rm -rf "$dir"                                  # clear an empty/broken clone
+  ya pkg add "yazi-rs/flavors:$name" >/dev/null 2>&1 || true
+  [ -f "$dir/flavor.toml" ] && ok "yazi flavor $name" \
+    || warn "yazi flavor $name skipped (run 'ya pkg add yazi-rs/flavors:$name')"
+}
+add_yazi_flavor catppuccin-mocha
+add_yazi_flavor catppuccin-latte
 
 # 9. LazyVim plugin sync ----------------------------------------------------
 info "Syncing Neovim plugins (LazyVim)..."
